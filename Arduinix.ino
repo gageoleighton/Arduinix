@@ -1,5 +1,6 @@
 // Arduinix - Nixie tube display clock
-// Latest revision by gageoleighton
+// V1.2 
+// Revision by gageoleighton
 // fading transitions sketch for 8-tube board with default connections.
 // based on 6-tube sketch by Emblazed
 // 4-tube-itized by Dave B. 16 June 2011
@@ -7,17 +8,11 @@
 
 #include "Wire.h"
 // Include RTC from adafuit
-#define DS3231_I2C_ADDRESS 0x68
-// Convert normal decimal numbers to binary coded decimal
-byte decToBcd(byte val)
-{
-  return( (val/10*16) + (val%10) );
-}
-// Convert binary coded decimal to normal decimal numbers
-byte bcdToDec(byte val)
-{
-  return( (val/16*10) + (val%16) );
-}
+#include <RTClib.h>
+
+RTC_DS3231 rtc;
+
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // SN74141 : Truth Table
 //D C B A #
@@ -47,8 +42,10 @@ int ledPin_a_2 = 11;
 int ledPin_a_3 = 12;
 int ledPin_a_4 = 13;
 
+
 void setup() 
 {
+  
   pinMode(ledPin_0_a, OUTPUT);      
   pinMode(ledPin_0_b, OUTPUT);      
   pinMode(ledPin_0_c, OUTPUT);      
@@ -62,27 +59,30 @@ void setup()
   pinMode(ledPin_a_1, OUTPUT);      
   pinMode(ledPin_a_2, OUTPUT);      
   pinMode(ledPin_a_3, OUTPUT);     
-
-  // Set analog Reference
-  analogReference(EXTERNAL); //Pin jummered to 5V (VCC)
- 
-  // NOTE:
-  // Grounding on virtual pins 14 and 15 (analog pins 0 and 1) will set the Hour and Mins.
-  pinMode( 14, INPUT ); // set the vertual pin 14 (pin 0 on the analog inputs ) 
-  digitalWrite(14, HIGH); // set pin 14 as a pull up resistor.
-
-  pinMode( 15, INPUT ); // set the vertual pin 15 (pin 1 on the analog inputs ) 
-  digitalWrite(15, HIGH); // set pin 15 as a pull up resistor.
-
+  
+ // Initialize I2C
   Wire.begin();
-  // set the initial time here:
-  // DS3231 seconds, minutes, hours, day, date, month, year
+
+  //////////////////////////////////////////////////////////////
+  //  set the initial time here:                              //
+  //  DS3231 seconds, minutes, hours, day, date, month, year  //
+  //////////////////////////////////////////////////////////////
   // setDS3231time(30,42,21,4,26,11,14);
+
  
+  // If arduino looses power and battery dies reset time to when script was uploaded
+  if (rtc.lostPower()) {
+    Serial.println("RTC lost power, lets set the time!");
+    // following line sets the RTC to the date & time this sketch was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+  }
+
 }
 
-void SetSN74141Chips( int num2, int num1 )
-{
+void SetSN74141Chips( int num2, int num1 ){
   int a,b,c,d;
   
   // set defaults.
@@ -135,51 +135,13 @@ void SetSN74141Chips( int num2, int num1 )
   digitalWrite(ledPin_1_a, a);
 }
 
-
-void setDS3231time(byte second, byte minute, byte hour, byte dayOfWeek, byte
-dayOfMonth, byte month, byte year)
-{
-  // sets time and date data to DS3231
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0); // set next input to start at the seconds register
-  Wire.write(decToBcd(second)); // set seconds
-  Wire.write(decToBcd(minute)); // set minutes
-  Wire.write(decToBcd(hour)); // set hours
-  Wire.write(decToBcd(dayOfWeek)); // set day of week (1=Sunday, 7=Saturday)
-  Wire.write(decToBcd(dayOfMonth)); // set date (1 to 31)
-  Wire.write(decToBcd(month)); // set month
-  Wire.write(decToBcd(year)); // set year (0 to 99)
-  Wire.endTransmission();
-}
-void readDS3231time(byte *second,
-byte *minute,
-byte *hour,
-byte *dayOfWeek,
-byte *dayOfMonth,
-byte *month,
-byte *year)
-{
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0); // set DS3231 register pointer to 00h
-  Wire.endTransmission();
-  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
-  // request seven bytes of data from DS3231 starting from register 00h
-  *second = bcdToDec(Wire.read() & 0x7f);
-  *minute = bcdToDec(Wire.read());
-  *hour = bcdToDec(Wire.read() & 0x3f);
-  *dayOfWeek = bcdToDec(Wire.read());
-  *dayOfMonth = bcdToDec(Wire.read());
-  *month = bcdToDec(Wire.read());
-  *year = bcdToDec(Wire.read());
-}
-
-////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 //
 // DisplayNumberString
 // Use: passing an array that is 4 elements long will display numbers
 //      on a 4 nixie bulb setup.
 //
-////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 float fadeIn = 0.0f;
 float fadeOut = 8.0f;
 float fadeMax = 8.0f;
@@ -197,7 +159,7 @@ void DisplayFadeNumberString()
   // be in time with the seconds bulbs. because any change only happens
   // on a one second interval. 
   
-  // 1 (0,3)
+  // Anode 1 (0,3)
   SetSN74141Chips(currNumberArray[0],currNumberArray[3]);   
   digitalWrite(ledPin_a_1, HIGH);   
   delay(NumberArrayFadeOutValue[0]);
@@ -205,13 +167,21 @@ void DisplayFadeNumberString()
   delay(NumberArrayFadeInValue[0]);
   digitalWrite(ledPin_a_1, LOW);
   
-  // 2 (1,2)
-  SetSN74141Chips(currNumberArray[1],currNumberArray[2]);   
+  // Anode 2 (1,4)
+  SetSN74141Chips(currNumberArray[1],currNumberArray[4]);   
   digitalWrite(ledPin_a_2, HIGH);   
   delay(NumberArrayFadeOutValue[1]);
-  SetSN74141Chips(NumberArray[1],NumberArray[2]);   
+  SetSN74141Chips(NumberArray[1],NumberArray[4]);   
   delay(NumberArrayFadeInValue[1]);
   digitalWrite(ledPin_a_2, LOW);
+
+    // Anode 3 (2,5)
+  SetSN74141Chips(currNumberArray[2],currNumberArray[5]);   
+  digitalWrite(ledPin_a_3, HIGH);   
+  delay(NumberArrayFadeOutValue[3]);
+  SetSN74141Chips(NumberArray[2],NumberArray[5]);   
+  delay(NumberArrayFadeInValue[3]);
+  digitalWrite(ledPin_a_3, LOW);
   
   // Loop thru and update all the arrays, and fades.
   for( int i = 0 ; i < 4 ; i ++ )
@@ -231,6 +201,29 @@ void DisplayFadeNumberString()
   }  
 }
 
+int readButtons(int pin,int pin2)
+// returns the button number pressed, or zero for none pressed 
+// int pin is the analog pin number to read 
+{
+  int b,c,d = 0;
+  c=digitalRead(pin); // get the digital value  1
+  d=digitalRead(pin2); // get digital value 2
+
+  if (c==HIGH & d==LOW){
+    b=1; // button 1 pressed
+  }
+      else if (c==LOW && d==HIGH){
+          b=2; // button 2 pressed
+        }           
+        else if (d==LOW & c==LOW){
+            b=0; // no buttons pressed
+          }
+          else if (c==HIGH & d==HIGH){
+            b=4; //both buttons pressed
+          }
+return b;
+}
+
 // Defines
 long MINS = 60;         // 60 Seconds in a Min.
 long HOURS = 60 * MINS; // 60 Mins in an hour.
@@ -238,56 +231,32 @@ long DAYS = 12 * HOURS; // 24 Hours in a day. > Note: change the 24 to a 12 for 
 
 long runTime = 0;       // Time from when we started.
 
-// default time sets. clock will start at 12:59:00
-long clockHourSet = 12;
-long clockMinSet  = 34;
+// default time sets
+long clockHourSet;
+long clockMinSet;
 
-int HourButtonPressed = false;
-int MinButtonPressed = false;
 
-////////////////////////////////////////////////////////////////////////
-//
-// NEED TO INCORPORATE RTC
-////////////////////////////////////////////////////////////////////////
+void setrtc(int sethour, int setmin){
+  DateTime now = rtc.now();
+  rtc.adjust(DateTime(now.year(),now.month(),now.day(),sethour,setmin,now.second()));
+}
+
+  // Buttons
+  int Button = 0;
+  int old_Button = 0;
+
 void loop()     
 {
-  // Get milliseconds.
-  runTime = millis();
-  
-  int hourInput = digitalRead(14);  
-  int minInput  = digitalRead(15);
+ 
+  DateTime now = rtc.now(); 
+ 
+  Button=old_Button;
 
-  if( hourInput == 0 )
-    HourButtonPressed = true;
-  if( minInput == 0 )
-    MinButtonPressed = true;
-  
-  if( HourButtonPressed == true && hourInput == 1 )
-  {
-    clockHourSet++;
-    HourButtonPressed = false;
-  }
-  
-  if( MinButtonPressed == true && minInput == 1 )
-  {
-    clockMinSet++;
-    MinButtonPressed = false;
-  }
-
-  // Get time in seconds.
-  long time = (runTime) / 1000;
-  
-  // Set time based on offset..
-  // long hbump = 60*60*clockHourSet;
-  long hbump = 60*60*clockHourSet;
-  long mbump = 60*clockMinSet;
-  time += mbump + hbump;
-
-  // Convert time to days,hours,mins,seconds
-  long days  = time / DAYS;    time -= days  * DAYS; 
-  long hours = time / HOURS;   time -= hours * HOURS; 
-  long minutes  = time / MINS;    time -= minutes  * MINS; 
-  long seconds  = time; 
+  // Convert time in days,hours,mins,seconds
+  long days  = now.day();
+  long hours = now.hour(); 
+  long minutes  = now.minute(); 
+  long seconds  = now.second(); 
 
   // Get the high and low order values for hours,min,seconds. 
   int lowerHours = hours % 10;
@@ -313,4 +282,38 @@ void loop()
 
   // Display.
   DisplayFadeNumberString();
+
+// Get state of buttons
+  Button = readButtons(A0,A1);
+  
+  if (Button != old_Button){
+    clockMinSet = now.minute();
+    clockHourSet = now.hour();
+    if(Button == 0){}
+    else if(Button == 1){
+      if(now.minute() != 59){
+      clockMinSet++;}
+      else {
+        clockMinSet = 0;
+      }
+      setrtc(clockHourSet,clockMinSet);
+      }
+      else if(Button == 2){
+        if(now.hour() != 23){
+          clockHourSet++;}
+          else {
+            clockHourSet = 0;
+          }
+      setrtc(clockHourSet,clockMinSet);
+      }
+      else if(Button == 4){
+        if(now.minute() != 0){
+        clockMinSet--;}
+        else {
+          clockMinSet = 59;
+        }
+        setrtc(clockHourSet,clockMinSet);
+      }
+    delay(100);
+  }
 }
