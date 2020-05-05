@@ -1,5 +1,6 @@
 # Arduinix
-Arduino Controlled Nixie tube clock with RTC
+Arduino Controlled Nixie tube clock with RTC DS3231
 
 Big thanks to Emblazed and Dave B. for publishing their code for the clock using SN74141 Chips
-This is my first major project in learing to code and also in design and homebrew of a PCB
+
+Uses a single library from https://github.com/adafruit/RTClib
